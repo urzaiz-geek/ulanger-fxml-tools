@@ -1,0 +1,14 @@
+
+
+#main {
+	-fx-background-color: #33BFE4;
+	-fx-padding: 0 1 5 1;
+}
+
+#label-close:hover{
+	-fx-border-radius: 7px;
+	-fx-background-radius: 7px;
+	-fx-text-fill: white;
+	-fx-background-color: #C85450;
+	-fx-alignment: center;
+}

@@ -1,0 +1,13 @@
+
+
+#main {
+	-fx-background-color: #33BFE4;
+}
+
+#label_close_notification:hover{
+	-fx-border-radius: 7px;
+	-fx-background-radius: 7px;
+	-fx-text-fill: white;
+	-fx-background-color: #C85450;
+	-fx-alignment: center;
+}

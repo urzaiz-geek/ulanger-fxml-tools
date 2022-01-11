@@ -1,4 +1,4 @@
-package com.urzaizcoding.ulangerproxy;
+package com.urzaizcoding.ulangerproxy.lang;
 
 import static com.urzaizcoding.ulangerproxy.exceptions.ExceptionWrappers.mapperWrapper;
 

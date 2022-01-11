@@ -1,4 +1,4 @@
-package com.urzaizcoding.ulangerproxy;
+package com.urzaizcoding.ulangerproxy.lang;
 
 public class ApplicationDescription {
 	private final String applicationName;

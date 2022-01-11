@@ -1,4 +1,4 @@
-package com.urzaizcoding.ulangerproxy;
+package com.urzaizcoding.ulangerproxy.graphics;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -13,12 +13,14 @@ import java.util.Properties;
 import com.urzaizcoding.ulangerproxy.exceptions.IncompletePathException;
 
 import javafx.fxml.FXMLLoader;
-import javafx.fxml.Initializable;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 
-public class FXUtilities {
+public final class FXUtilities {
 
+	private static final String FXMLPATH_PROPERTY = "fxmlpath";
+	private static final String HEIGHT_PROPERTY = "height";
+	private static final String WIDTH_PROPERTY = "width";
 	public static final String HOME_CONFIG = "home.properties";
 
 	public static class StageSettings {
@@ -149,11 +151,11 @@ public class FXUtilities {
 			throws NumberFormatException, NoSuchElementException {
 
 		return new StageSettings.StageSettingsBuilder(
-				Optional.ofNullable(p.getProperty("fxmlpath")).orElseThrow(NoSuchElementException::new))
+				Optional.ofNullable(p.getProperty(FXMLPATH_PROPERTY)).orElseThrow(NoSuchElementException::new))
 						.height(Double.parseDouble(
-								Optional.ofNullable(p.getProperty("width")).orElseThrow(NoSuchElementException::new)))
+								Optional.ofNullable(p.getProperty(WIDTH_PROPERTY)).orElseThrow(NoSuchElementException::new)))
 						.width(Double.parseDouble(
-								Optional.ofNullable(p.getProperty("height")).orElseThrow(NoSuchElementException::new)))
+								Optional.ofNullable(p.getProperty(HEIGHT_PROPERTY)).orElseThrow(NoSuchElementException::new)))
 						.build();
 
 	}
