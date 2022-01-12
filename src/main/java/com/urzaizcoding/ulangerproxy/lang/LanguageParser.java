@@ -9,37 +9,68 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.function.Predicate;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import com.urzaizcoding.ulangerproxy.exceptions.ExceptionWrappers.ThrowingFunction;
 import com.urzaizcoding.ulangerproxy.exceptions.FileDescriptionNotMatchedException;
 import com.urzaizcoding.ulangerproxy.exceptions.IdNotFoundInClassException;
 import com.urzaizcoding.ulangerproxy.exceptions.IllegalFileFormatException;
-import com.urzaizcoding.ulangerproxy.exceptions.ExceptionWrappers.ThrowingFunction;
+import com.urzaizcoding.ulangerproxy.log.Logger;
 
 public class LanguageParser {
 	private final ArrayList<LClass> classLanguage;
 	private LanguageDescription languageDescription;
-	private final String languageFilePath;
+	private final URI languageFilePath;
 
-	public LanguageParser(String langFilePath) throws IOException, IllegalFileFormatException {
+	public LanguageParser(URI langFilePath) throws IOException, IllegalFileFormatException {
 		this.languageFilePath = langFilePath;
 		this.classLanguage = new ArrayList<>();
 		parse();
 	}
 
 	/**
-	 * retrieve all the declared fields of a given class
+	 * retrieve all the declared and inherited fields names of a given class
 	 * 
 	 * @param rclass is the class that we desire to obtain fields
 	 * @return {@link ArrayList} of String describing those fields
 	 */
-	public static final ArrayList<String> getIds(Class<?> rclass) {
-		return Arrays.stream(rclass.getDeclaredFields()).map(Field::getName).collect(Collectors.toCollection(ArrayList::new));
+	public static final List<String> getIds(Class<?> rclass) {
+		return getAllFields(rclass).stream().map(Field::getName).collect(Collectors.toList());
+	}
+
+	public static List<Field> getInheritedFields(Class<?> rClass) {
+		List<Field> listFields = new LinkedList<>();
+
+		Class<?> superClass = rClass.getSuperclass();
+		while (!superClass.equals(Object.class)) {
+
+			listFields.addAll(Arrays.stream(superClass.getDeclaredFields())
+					.filter(f -> f.getModifiers() == Modifier.PROTECTED).collect(Collectors.toList()));
+			superClass = superClass.getSuperclass();
+		}
+		return listFields;
+	}
+
+	/**
+	 * Retrieve all the actual declared and inherited fields of the given class
+	 * (private members of superclasses are ignored)
+	 * 
+	 * @param rClass : the class for whom we want the field list.
+	 * @return a {@link List} with {@link Field} objects
+	 */
+	public static List<Field> getAllFields(Class<?> rClass) {
+		return Stream.concat(Arrays.stream(rClass.getDeclaredFields()), getInheritedFields(rClass).stream())
+				.collect(Collectors.toList());
 	}
 
 	/**
@@ -52,15 +83,26 @@ public class LanguageParser {
 	 */
 	public static Class<?> getFieldClass(Class<?> container, String fieldName) throws IdNotFoundInClassException {
 
-		if (!getIds(container).contains(fieldName)) {
+		return getField(container, fieldName).getType();
+	}
+
+	/**
+	 * retrieve a particular field in a class given his name and his container class, this method will ascend th class hierarchy to find the
+	 * requested field in superclasses if exists. NOTE: This method find only the accessible fields (protected one in superclass)
+	 * @param container : the class that may contain the field
+	 * @param fieldName : the requested field name as declared in his class
+	 * @return a {@link Field} object describing the field 
+	 * @throws IdNotFoundInClassException when the file does'nt exists int the class or in the superClasses
+	 */
+	public static Field getField(Class<?> container, String fieldName) throws IdNotFoundInClassException {
+		Optional<Field> retour = getAllFields(container).stream().filter(f -> f.getName().equals(fieldName))
+				.findFirst();
+		if (retour.isPresent()) {
+			return retour.get();
+		} else {
 			throw new IdNotFoundInClassException(fieldName, container.getName());
 		}
-		
-		return Arrays.stream(container.getDeclaredFields())
-				.filter(f -> f.getName().equals(fieldName))
-				.findFirst()
-				.get().
-				getType();
+
 	}
 
 	/**
@@ -80,27 +122,19 @@ public class LanguageParser {
 	 *                                            description is encountered
 	 */
 	public static final ArrayList<LanguageParser> getAvailableLanguages(URL pathToLanguageFolder,
-			ApplicationDescription desc) throws IOException, IllegalFileFormatException, FileDescriptionNotMatchedException {
-		ArrayList<LanguageParser> retour = new ArrayList<>();
-		File languageDir = new File(pathToLanguageFolder.getPath());
-		FileFilter filter = new FileFilter() {
+			ApplicationDescription desc) throws IOException, IllegalFileFormatException {
 
-			@Override
-			public boolean accept(File file) {
-				if (file.getName().split("\\.")[1].equalsIgnoreCase("ulang")) {
-					return true;
-				}
-				return false;
-			}
+		File languageDir = new File(pathToLanguageFolder.getPath());
+		FileFilter filter = (file) -> file.getName().split("\\.")[1].equalsIgnoreCase("ulang");
+
+		ThrowingFunction<File, LanguageParser> foo = (t) -> {
+			return new LanguageParser(t.toURI());
 		};
-		
-		ThrowingFunction<File,LanguageParser> foo = (t) -> {return new LanguageParser(t.getAbsolutePath());};
-		
-		retour = Arrays.stream(languageDir.listFiles(filter))
-				.map(mapperWrapper(foo,null,IOException.class))
-				.filter(p -> p.matchApplicationDescription(desc))
-				.collect(Collectors.toCollection(ArrayList::new));
-		
+
+		return Arrays.stream(languageDir.listFiles(filter))
+				.map(mapperWrapper(foo, Logger.loggerObject, Exception.class))
+				.filter(p -> p.matchApplicationDescription(desc)).collect(Collectors.toCollection(ArrayList::new));
+
 //		for (File f : languageDir.listFiles(filter)) {
 //			LanguageParser parser = new LanguageParser(f.getAbsolutePath());
 //			if (parser.matchApplicationDescription(desc)) {
@@ -110,7 +144,6 @@ public class LanguageParser {
 //				throw new FileDescriptionNotMatchedException(desc.getApplicationName(), desc.getVersion());
 //			}
 //		}
-		return retour;
 	}
 
 	/**
@@ -128,7 +161,7 @@ public class LanguageParser {
 		// the first line must be the description
 		String line = reader.readLine();
 		if (!line.equalsIgnoreCase(":description")) {
-			throw new IllegalFileFormatException(languageFilePath, lineNumber, line);
+			throw new IllegalFileFormatException(languageFilePath.getPath(), lineNumber, line);
 		}
 		/**
 		 * fetch the file description
@@ -140,7 +173,7 @@ public class LanguageParser {
 			param = param.trim();
 			if (!Directive.isParam("description", param)) {
 				reader.close();
-				throw new IllegalFileFormatException(languageFilePath, lineNumber, param);
+				throw new IllegalFileFormatException(languageFilePath.getPath(), lineNumber, param);
 			}
 			desc[lineNumber - 2] = line.split("=")[1].trim();
 		}
@@ -153,7 +186,7 @@ public class LanguageParser {
 		line = reader.readLine();
 		lineNumber++;
 		if (!line.equalsIgnoreCase(":beg")) {
-			throw new IllegalFileFormatException(languageFilePath, lineNumber, line);
+			throw new IllegalFileFormatException(languageFilePath.getPath(), lineNumber, line);
 		}
 
 		int i = 0; // we will use it to loop through the classes
@@ -162,7 +195,7 @@ public class LanguageParser {
 			lineNumber++;
 			if (!line.split("=")[0].trim().equalsIgnoreCase(":class")) {
 				reader.close();
-				throw new IllegalFileFormatException(languageFilePath, lineNumber, line);
+				throw new IllegalFileFormatException(languageFilePath.getPath(), lineNumber, line);
 			}
 			classLanguage.add(new LClass(line.split("=")[1].trim()));
 
@@ -170,15 +203,15 @@ public class LanguageParser {
 				lineNumber++;
 				if (!Directive.isDirective(line.trim().substring(1))) {
 					reader.close();
-					throw new IllegalFileFormatException(languageFilePath, lineNumber, line);
+					throw new IllegalFileFormatException(languageFilePath.getPath(), lineNumber, line);
 				}
 				dir = line.trim().substring(1);
-				String id = null,method = null, value = null;
+				String id = null, method = null, value = null;
 				while (!(line = reader.readLine()).trim().equalsIgnoreCase(":end" + dir)) {
 					lineNumber++;
 					if (!Directive.isParam(dir, line.split("=")[0].trim())) {
 						reader.close();
-						throw new IllegalFileFormatException(languageFilePath, lineNumber, line);
+						throw new IllegalFileFormatException(languageFilePath.getPath(), lineNumber, line);
 					}
 					if (line.split("=")[0].trim().equalsIgnoreCase("id")) {
 						id = line.split("=")[1].trim();
@@ -190,7 +223,7 @@ public class LanguageParser {
 					}
 					if (line.split("=")[0].trim().equalsIgnoreCase("value")) {
 						value = line.split("=")[1].trim();
-						value = value.substring(1,value.length()-1);
+						value = value.substring(1, value.length() - 1);
 					}
 					classLanguage.get(i).getClassfields().add(new LField(id, method, value));
 				}
@@ -270,24 +303,16 @@ public class LanguageParser {
 		private final String directiveName;
 		private final ArrayList<String> directiveParams;
 
-		private static final HashSet<Directive> directivesList = new HashSet<>(Arrays.asList(new Directive[] {
-				new Directive("description", "name", "application", "version", "codeName"),
-				new Directive("field", "id", "value", "method"),
-				new Directive("class"), new Directive("beg"), new Directive("end")
+		private static final HashSet<Directive> directivesList = new HashSet<>(Arrays
+				.asList(new Directive[] { new Directive("description", "name", "application", "version", "codeName"),
+						new Directive("field", "id", "value", "method"), new Directive("class"), new Directive("beg"),
+						new Directive("end")
 
-		}));
+				}));
 
 		private Directive(String name, String... params) {
 			directiveName = name;
 			directiveParams = new ArrayList<String>(Arrays.asList(params));
-		}
-
-		public String getDirectiveName() {
-			return directiveName;
-		}
-
-		public ArrayList<String> getDirectiveParams() {
-			return directiveParams;
 		}
 
 		/**
@@ -297,12 +322,8 @@ public class LanguageParser {
 		 * @return
 		 */
 		public static boolean isDirective(String name) {
-			for (Directive dir : directivesList) {
-				if (dir.getDirectiveName().equalsIgnoreCase(name)) {
-					return true;
-				}
-			}
-			return false;
+
+			return directivesList.stream().anyMatch(d -> d.directiveName.equalsIgnoreCase(name));
 		}
 
 		/**
@@ -316,14 +337,9 @@ public class LanguageParser {
 			if (!isDirective(dir)) {
 				return false;
 			}
-			Predicate<Directive> predicate = d -> d.getDirectiveName().equals(dir);
-			Directive eDir = directivesList.stream().filter(predicate).findFirst().get();
-			for (String pars : eDir.getDirectiveParams()) {
-				if (pars.equalsIgnoreCase(param)) {
-					return true;
-				}
-			}
-			return false;
+
+			return directivesList.stream().filter(d -> d.directiveName.equalsIgnoreCase(dir)).findFirst()
+					.get().directiveParams.stream().anyMatch(p -> p.equalsIgnoreCase(param));
 		}
 	}
 
@@ -343,7 +359,7 @@ public class LanguageParser {
 		public String getName() {
 			return name;
 		}
-		
+
 		public String getCodeName() {
 			return codeName;
 		}
@@ -361,8 +377,6 @@ public class LanguageParser {
 			return "LanguageDescription [name=" + name + ", codeName=" + codeName + ", applicationOwner="
 					+ applicationOwner + ", version=" + version + "]";
 		}
-
-		
 
 	}
 

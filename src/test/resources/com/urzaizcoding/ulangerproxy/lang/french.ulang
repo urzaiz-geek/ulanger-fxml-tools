@@ -1,0 +1,60 @@
+:description
+	name = Français
+	codeName = Fr
+	application = guste
+	version = 1.0
+:endDescription
+:beg
+	:class = LoginController
+		:field
+			id = usernameLabel
+			method = setText
+			value = "nom d'utilisateur"
+		:endField
+		:field
+			id = connectButton
+			method = setText
+			value = "connexion"
+		:endField
+		:field
+			id = displayPasswordCheckBox
+			method = setText
+			value = "afficher le mot de passe"
+		:endField
+		:field
+			id = labelTitreConnect
+			method = setText
+			value = "Connectez vous"
+		:endField
+		:field
+			id = usernameField
+			method = setPromptText
+			value = "nom d'utilisateur"
+		:endField
+		:field
+			id = passwordLabel
+			method = setText
+			value = "mot de passe"
+		:endField
+		:field
+			id = anneeCombo
+			method = setPromptText
+			value = "Année académique"
+		:endField
+		:field
+			id = passwordField
+			method = setPromptText
+			value = "mot de passe"
+		:endField
+		:field
+			id = passwordFieldVisible
+			method = setPromptText
+			value = "mot de passe"
+		:endField
+		:field
+			id = passwordLabelVisible
+			method = setText
+			value = "mot de passe"
+		:endField
+	:endClass
+:end
