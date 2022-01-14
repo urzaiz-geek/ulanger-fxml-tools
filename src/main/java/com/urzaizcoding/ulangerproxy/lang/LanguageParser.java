@@ -121,10 +121,10 @@ public class LanguageParser {
 	 *                                            correspond to the current
 	 *                                            description is encountered
 	 */
-	public static final ArrayList<LanguageParser> getAvailableLanguages(URL pathToLanguageFolder,
+	public static final ArrayList<LanguageParser> getAvailableLanguages(File languageDir,
 			ApplicationDescription desc) throws IOException, IllegalFileFormatException {
 
-		File languageDir = new File(pathToLanguageFolder.getPath());
+		
 		FileFilter filter = (file) -> file.getName().split("\\.")[1].equalsIgnoreCase("ulang");
 
 		ThrowingFunction<File, LanguageParser> foo = (t) -> {

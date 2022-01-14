@@ -1,16 +1,24 @@
 package com.urzaizcoding.ulangerproxy.graphics;
 
+import static com.urzaizcoding.ulangerproxy.lang.LanguageParser.getAvailableLanguages;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
-import java.util.NoSuchElementException;
-import java.util.Optional;
+import java.util.ArrayList;
 import java.util.Properties;
 
+import com.urzaizcoding.ulangerproxy.exceptions.ContextClassNotProvidedException;
+import com.urzaizcoding.ulangerproxy.exceptions.IllegalFileFormatException;
 import com.urzaizcoding.ulangerproxy.exceptions.IncompletePathException;
+import com.urzaizcoding.ulangerproxy.lang.ApplicationDescription;
+import com.urzaizcoding.ulangerproxy.lang.LanguageParser;
+import com.urzaizcoding.ulangerproxy.log.Logger;
 
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -21,35 +29,65 @@ public final class FXUtilities {
 	private static final String FXMLPATH_PROPERTY = "fxmlpath";
 	private static final String HEIGHT_PROPERTY = "height";
 	private static final String WIDTH_PROPERTY = "width";
-	public static final String HOME_CONFIG = "home.properties";
+	private static final String LANG_DIR_PROPERTY = "langdir";
+	private static final String CONTEXT_CLASS_PROPERTY = "context";
+	private static Properties defaultProperties;
+	public static final String HOME_CONFIG;
+
+	static {
+		HOME_CONFIG = FXUtilities.class.getResource("defaults.properties").getFile();
+		try {
+			defaultProperties = loadProperties(HOME_CONFIG);
+		} catch (IOException e) {
+			Logger.loggerObject.writeError(FXUtilities.class.getName(),
+					Logger.getExceptionMessage(e) + " Error while attempting to load default properties");
+			defaultProperties = new Properties();
+			defaultPropertiesInitilization();
+		}
+	}
+
+	private static void defaultPropertiesInitilization() {
+		defaultProperties.setProperty(FXMLPATH_PROPERTY, "root");
+		defaultProperties.setProperty(HEIGHT_PROPERTY, "300");
+		defaultProperties.setProperty(WIDTH_PROPERTY, "400");
+		defaultProperties.setProperty(LANG_DIR_PROPERTY, "languages");
+	}
 
 	public static class StageSettings {
 
 		private String fxmlPath;
+		private Class<?> contextClassName;
 		private Object controller;
 		private final double width;
 		private final double height;
 		private boolean completePath;
-		private URL fxmlcompletePath;
+		private URI fxmlcompletePath;
+		private String languageDirectory;
 
-		private StageSettings(String fxmlPath, Object controller, double width, double height) {
+		private StageSettings(String fxmlPath, Class<?> context, Object controller, double width, double height,
+				String languageDir){
 			super();
 			this.fxmlPath = fxmlPath;
 			this.controller = controller;
 			this.width = width;
 			this.height = height;
+			this.languageDirectory = languageDir;
+			this.contextClassName = context;
 		}
 
 		public static class StageSettingsBuilder {
 
 			private String fxmlPath;
+			private Class<?> contextClassName;
 			private Object controller;
 			private double width;
 			private double height;
+			private String languageDir;
 
-			public StageSettingsBuilder(String fxmlPath) {
+			public StageSettingsBuilder(String fxmlPath, String contextClazz) throws ClassNotFoundException {
 				super();
 				this.fxmlPath = fxmlPath;
+				this.contextClassName = Class.forName(contextClazz);
 			}
 
 			public StageSettingsBuilder width(double w) {
@@ -67,8 +105,13 @@ public final class FXUtilities {
 				return this;
 			}
 
+			public StageSettingsBuilder languageDirectory(String dir) {
+				this.languageDir = dir;
+				return this;
+			}
+
 			public StageSettings build() {
-				return new StageSettings(fxmlPath, controller, width, height);
+				return new StageSettings(fxmlPath, contextClassName, controller, width, height, languageDir);
 			}
 
 		}
@@ -96,19 +139,31 @@ public final class FXUtilities {
 		public final boolean isCompletePath() {
 			return completePath;
 		}
-		
+
 		@Deprecated
-		public void updatePath(String fpath) throws MalformedURLException,IOException {
-			updatePath(new URL(fpath));
+		public void updateFXMLPath(String fpath) throws MalformedURLException, IOException, URISyntaxException {
+			updateFXMLPath(new URI(fpath));
 		}
-		
-		public void updatePath(URL fp) {
+
+		public void updateFXMLPath(URI fp) {
 			this.fxmlcompletePath = fp;
 			completePath = true;
 		}
 
-		public URL getFxmlcompletePath() {
+		public URI getFxmlcompletePath() {
 			return fxmlcompletePath;
+		}
+
+		public String getLanguageDirectory() {
+			return languageDirectory;
+		}
+
+		public void setLanguageDirectory(String languageDirectory) {
+			this.languageDirectory = languageDirectory;
+		}
+
+		public Class<?> getContextClass() {
+			return contextClassName;
 		}
 
 	}
@@ -118,6 +173,7 @@ public final class FXUtilities {
 	}
 
 	public static Parent loadFXML(String fxmlPath) throws IOException, MalformedURLException {
+
 		return getLoader(fxmlPath).load();
 	}
 
@@ -148,25 +204,60 @@ public final class FXUtilities {
 	}
 
 	public static StageSettings buildSettingsFromProperties(Properties p)
-			throws NumberFormatException, NoSuchElementException {
+			throws NumberFormatException, ContextClassNotProvidedException, ClassNotFoundException {
+		String fxml, context, langdir;
+		double height, width;
 
-		return new StageSettings.StageSettingsBuilder(
-				Optional.ofNullable(p.getProperty(FXMLPATH_PROPERTY)).orElseThrow(NoSuchElementException::new))
-						.height(Double.parseDouble(
-								Optional.ofNullable(p.getProperty(WIDTH_PROPERTY)).orElseThrow(NoSuchElementException::new)))
-						.width(Double.parseDouble(
-								Optional.ofNullable(p.getProperty(HEIGHT_PROPERTY)).orElseThrow(NoSuchElementException::new)))
-						.build();
+		fxml = p.getProperty(FXMLPATH_PROPERTY, defaultProperties.getProperty(FXMLPATH_PROPERTY));
+		context = p.getProperty(CONTEXT_CLASS_PROPERTY);
+		langdir = p.getProperty(LANG_DIR_PROPERTY, defaultProperties.getProperty(LANG_DIR_PROPERTY));
+		height = Double.parseDouble(p.getProperty(HEIGHT_PROPERTY, defaultProperties.getProperty(HEIGHT_PROPERTY)));
+		width = Double.parseDouble(p.getProperty(WIDTH_PROPERTY, defaultProperties.getProperty(WIDTH_PROPERTY)));
+
+		if (context == null) {
+			throw new ContextClassNotProvidedException(
+					"The class to use for resource finding and loading hasn't been provided");
+		}
+		String contextClazz;
+		contextClazz = context.equals("no-context") ? null : context;
+
+		return new StageSettings.StageSettingsBuilder(fxml, contextClazz).languageDirectory(langdir).height(height)
+				.width(width).build();
 
 	}
 
-	public static Scene sceneFromSettings(StageSettings s) throws IOException, IncompletePathException {
-		if(!s.isCompletePath()) {
-			throw new IncompletePathException("The given path is not a fully qualified path must be upddated");
+	public static Scene sceneFromSettings(StageSettings s)
+			throws IOException, IncompletePathException, ClassNotFoundException {
+		if (!s.isCompletePath() && (s.getContextClass() == null)) {
+			throw new IncompletePathException(
+					"The given path is not a fully qualified path must be updated or a context provided");
 		}
-		return new Scene(loadFXML(s.getFxmlcompletePath(), s.getController()), 
-				s.getHeight(),
-				 s.getWidth());
+
+		Class<?> contexzz = s.getContextClass();
+
+		if (contexzz != null) {
+
+			try {
+				return new Scene(
+						loadFXML(contexzz.getResource("").toExternalForm().concat(s.getFxmlPath()), s.getController()),
+						s.getWidth(), s.getHeight());
+			} catch (IOException e) {
+				throw e;
+			}
+		}
+
+		return new Scene(loadFXML(s.getFxmlcompletePath().toURL(), s.getController()), s.getWidth(), s.getHeight());
+	}
+
+	public static ArrayList<LanguageParser> availableLanguagesFromSettings(StageSettings s, ApplicationDescription desc)
+			throws MalformedURLException, IOException, IllegalFileFormatException, ClassNotFoundException {
+
+		File f = new File(s.getContextClass() == null ? s.getLanguageDirectory()
+				: s.getContextClass().getResource("").getFile().concat(s.getLanguageDirectory()));
+		if (f.isDirectory()) {
+			return getAvailableLanguages(f, desc);
+		}
+		throw new IllegalStateException("The file object doesn't describe a directory");
 	}
 
 }
